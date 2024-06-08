@@ -9,7 +9,7 @@ import (
 
 	"log/slog"
 
-	"github.com/docker/docker/daemon/config"
+	"github.com/lkendrickd/jwtauthorizor/config"
 	"github.com/lkendrickd/jwtauthorizor/internal/server"
 )
 
@@ -24,12 +24,12 @@ func main() {
 	// Parse command-line flags
 	flag.Parse()
 
-	cfg := config.New(*hmacKey, *tokenIssuer, *tokenExpirationMin, *port)
-
-	// Check for environment variables and override flag values if necessary for port
-	if envPort, exists := os.LookupEnv("PORT"); exists {
-		*port = envPort
-	}
+	cfg := config.NewConfig(
+		config.WithPort(*port),
+		config.WithHmacKey(*hmacKey),
+		config.WithTokenIssuer(*tokenIssuer),
+		config.WithTokenExpirationMin(*tokenExpirationMin),
+	)
 
 	// Check for environment variables and override flag values if necessary for log level
 	if envLogLevel, exists := os.LookupEnv("LOG_LEVEL"); exists {
@@ -46,7 +46,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	// Create and start the server
-	s := server.NewServer(logger, mux, fmt.Sprintf(":%s", *port))
+	s := server.NewServer(logger, mux, cfg)
 	if err := s.Start(); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}

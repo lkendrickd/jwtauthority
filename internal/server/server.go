@@ -1,19 +1,24 @@
+// server/server.go
+
 package server
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"github.com/lkendrickd/jwtauthorizor/internal/handlers"
-	"github.com/lkendrickd/jwtauthorizor/internal/middleware"
+	"log/slog"
 
+	"github.com/go-jose/go-jose/v3"
+	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/lkendrickd/jwtauthorizor/config"
+	"github.com/lkendrickd/jwtauthorizor/internal/middleware"
+	"github.com/lkendrickd/jwtauthorizor/models"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -24,25 +29,32 @@ func init() {
 	prometheus.MustRegister(middleware.EndpointCount)
 }
 
+// TokenValidator defines the interface for validating tokens
+type TokenValidator interface {
+	ValidateToken(tokenString string) (*models.Claims, error)
+}
+
 // Server is the HTTP server
 type Server struct {
+	config *config.Config
 	logger *slog.Logger
 	muxer  *http.ServeMux
 	server *http.Server
 }
 
 // NewServer creates a new Server with middleware applied
-func NewServer(l *slog.Logger, mux *http.ServeMux, port string) *Server {
+func NewServer(l *slog.Logger, mux *http.ServeMux, config *config.Config) *Server {
 	// Wrap the existing muxer with the metricsMiddleware
 	wrappedMux := middleware.MetricsMiddleware(mux)
 
 	// Create a new http.Server using the wrapped muxer
 	server := &http.Server{
-		Addr:    port,
+		Addr:    config.Port,
 		Handler: wrappedMux,
 	}
 
 	return &Server{
+		config: config,
 		logger: l,
 		muxer:  mux,
 		server: server,
@@ -92,18 +104,43 @@ func (s *Server) SetupRoutes() {
 			"%s %s/login",
 			http.MethodPost,
 			path,
-		), handlers.LoginHandler,
+		), s.LoginHandler,
 	)
 
-	//http.Handle("/protected", withAuth(http.HandlerFunc(handlers.ProtectedHandler)))
 	s.muxer.Handle(
 		fmt.Sprintf(
 			"%s %s/protected",
 			http.MethodGet,
 			path,
-		), middleware.WithAuth(http.HandlerFunc(handlers.ProtectedHandler)),
+		), s.WithAuth(s.ProtectedHandler()),
 	)
 
-	s.muxer.HandleFunc("GET /health", handlers.HealthHandler)
+	s.muxer.HandleFunc("GET /health", s.HealthHandler)
 	s.muxer.Handle("GET /metrics", promhttp.Handler())
+}
+
+// GenerateToken generates a JWT token
+func (s *Server) GenerateToken(username string) (string, error) {
+	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS256, Key: s.config.HmacKey}, nil)
+	if err != nil {
+		return "", err
+	}
+
+	claims := models.Claims{
+		Username: username,
+		Claims: jwt.Claims{
+			Issuer:    s.config.TokenIssuer,
+			Subject:   "user_token",
+			Audience:  jwt.Audience{"jwtauthorizor"},
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			Expiry:    jwt.NewNumericDate(time.Now().Add(time.Duration(s.config.TokenExpirationMin) * time.Minute)),
+			NotBefore: jwt.NewNumericDate(time.Now()),
+		},
+	}
+
+	raw, err := jwt.Signed(signer).Claims(claims).CompactSerialize()
+	if err != nil {
+		return "", err
+	}
+	return raw, nil
 }

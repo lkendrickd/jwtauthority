@@ -15,3 +15,7 @@ type Claims struct {
 	Username string `json:"username"`
 	jwt.Claims
 }
+
+type ContextKey string
+
+var UserContextKey = ContextKey("user")
