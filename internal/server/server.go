@@ -49,7 +49,7 @@ func NewServer(l *slog.Logger, mux *http.ServeMux, config *config.Config) *Serve
 
 	// Create a new http.Server using the wrapped muxer
 	server := &http.Server{
-		Addr:    config.Port,
+		Addr:    fmt.Sprintf(":%s", config.Port),
 		Handler: wrappedMux,
 	}
 

@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 
 	"log/slog"
 
@@ -30,6 +31,30 @@ func main() {
 		config.WithTokenIssuer(*tokenIssuer),
 		config.WithTokenExpirationMin(*tokenExpirationMin),
 	)
+
+	// override the config values with environment variables if they exist
+	if envPort, exists := os.LookupEnv("PORT"); exists {
+		cfg.Port = envPort
+		log.Printf("Using port from environment variable PORT: %s\n", envPort)
+	}
+
+	if envHmacKey, exists := os.LookupEnv("HMAC_KEY"); exists {
+		cfg.HmacKey = envHmacKey
+	}
+
+	if envTokenIssuer, exists := os.LookupEnv("TOKEN_ISSUER"); exists {
+		cfg.TokenIssuer = envTokenIssuer
+	}
+
+	if envTokenExpirationMin, exists :=
+		os.LookupEnv("TOKEN_EXPIRATION_MIN"); exists {
+		tokenExpirationMin, err := strconv.Atoi(envTokenExpirationMin)
+		if err != nil {
+			log.Fatalf("Failed to parse TOKEN_EXPIRATION_MIN: %v", err)
+		}
+
+		cfg.TokenExpirationMin = tokenExpirationMin
+	}
 
 	// Check for environment variables and override flag values if necessary for log level
 	if envLogLevel, exists := os.LookupEnv("LOG_LEVEL"); exists {

@@ -37,6 +37,8 @@ func (s *Server) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fmt.Printf("User %s logged in\n", req.Username)
+
 	token, err := s.GenerateToken(req.Username)
 	if err != nil {
 		http.Error(w, "Could not generate token", http.StatusInternalServerError)
